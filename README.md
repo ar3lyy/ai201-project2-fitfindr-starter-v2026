@@ -82,16 +82,10 @@
 
 ## Planning Loop
 
-<!-- Your branch rule, stated as a rule — the condition AND both paths — plus
-     the file and function that holds it.
+**Branch rule:** If search_listings returns an empty list, save a message in the session suggesting the user change their description, size, or maximum price, then stop without calling suggest_outfit or create_fit_card. Otherwise, save the first result as selected_item, use it to suggest an outfit, and create a fit card, saving and reading each result through the session.
 
-     Like this:
-       "If search_listings returns an empty list, put a message in the session
-        and stop. Otherwise take the first result and go to suggest_outfit."
-        — agent.py::run_agent
+**Where it lives:** `agent.py::run_agent`
 
-     The grader checks your code against what you claim here, so the file and
-     function have to be real. -->
 
 **Branch rule:**
 
@@ -128,20 +122,26 @@ $ python app.py ask '...'
 
 **The three tools, tested one at a time**
 
-```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
+### `search_listings`
 
-```
+- **What it does:** Loads listings using load_listings(), filters by optional size and maximum price, and ranks matches by keyword overlap with the title, description, and style_tags.
+- **Inputs:** description (str), size (str or None; default None), max_price (float or None; default None).
+- **Returns:** A list of matching listing dictionaries, highest keyword score first, limited to config.SEARCH_RESULT_LIMIT. Each dictionary contains id, title, description, category, style_tags, size, condition, price, colors, brand, and platform. Price filtering includes the maximum price. Size matching ignores capitalization and compares complete size tokens: M matches S/M, L does not match XL, and S does not match US 9. None skips the corresponding filter.
+- **When it has nothing:** Returns an empty list, [].
 
-```
-$ python -c "from tools import suggest_outfit; ..."
+### `suggest_outfit`
 
-```
+- **What it does:** Calls the model through generate() to suggest one or two outfits combining the selected listing with wardrobe items.
+- **Inputs:** new_item (dict containing a listing), wardrobe (dict containing an items list of clothing dictionaries).
+- **Returns:** A non-empty string describing one or two outfits, naming the selected item and specific pieces from the wardrobe.
+- **When it has nothing:** If the wardrobe's items list is empty, returns general styling advice for the selected item without claiming the user owns the suggested pieces.
 
-```
-$ python -c "from tools import create_fit_card; ..."
+### `create_fit_card`
 
-```
+- **What it does:** Calls the model through generate() to write a short social caption based on the selected item and outfit suggestion.
+- **Inputs:** outfit (str), new_item (dict containing a listing).
+- **Returns:** A two-to-four sentence caption mentioning the item, its price, and its platform once each, with a specific style or vibe.
+- **When it has nothing:** If outfit is empty or contains only whitespace, returns "Cannot create a fit card without an outfit suggestion." without calling the model.
 
 ---
 
