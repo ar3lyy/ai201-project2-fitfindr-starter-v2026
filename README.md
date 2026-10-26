@@ -105,10 +105,19 @@
 
 ## Sample Run
 
-<!-- Two things go here.
+### Milestone 1: Starter check
 
-     1. One FULL query and its output, pasted as text.
-     2. Your three per-tool terminal tests — the command and what it printed. -->
+All 10 environment checks passed. I inspected six listings and reviewed fields including title, description, style_tags, size, and price. The wardrobe stores clothing in an items list; an empty wardrobe is {"items": []}.
+
+Starter command and output:
+
+```text
+$ python app.py ask 'vintage graphic tee under $30'
+
+  The planning loop isn't built yet — see the TODO in agent.py.
+
+0 model calls this session
+```
 
 **One full query**
 
