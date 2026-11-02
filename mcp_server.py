@@ -59,7 +59,7 @@ works with a direct call, and **a documented failure earns the point in full.**
 
 from mcp.server.fastmcp import FastMCP
 
-from tools import search_listings as _search_listings_impl  # noqa: F401 — you'll use this below
+from tools import search_listings as _search_listings_impl
 
 # log_level="WARNING" keeps the server from printing an INFO line for every
 # request. Without it your terminal fills with "Processing request of type
@@ -67,37 +67,34 @@ from tools import search_listings as _search_listings_impl  # noqa: F401 — you
 mcp = FastMCP("fitfindr", log_level="WARNING")
 
 
-# ── TODO: uncomment and fill this in ──────────────────────────────────────────
+# ── Registered search tool ────────────────────────────────────────────────────
+
+@mcp.tool()
+def search_listings(
+    description: str,
+    size: str | None = None,
+    max_price: float | None = None,
+) -> list[dict]:
+    """
+    Search local thrift listings using description keywords (string), an
+    optional size (string), and an optional inclusive max_price (number in
+    US dollars); omitted or null size and max_price skip those filters.
+
+    Returns up to the configured result limit of listing dictionaries ranked
+    by keyword overlap, or an empty list when nothing matches. Each listing
+    includes id, title, description, category, style_tags, size, condition,
+    price, colors, brand, and platform. Size matching ignores case and uses
+    complete tokens: M matches S/M, but L does not match XL.
+    """
+    return _search_listings_impl(description, size, max_price)
+
+
+# The registered name is the function name: "search_listings".
+# The implementation is imported under an alias so this wrapper calls the
+# original tool rather than accidentally calling itself.
 #
-# @mcp.tool()
-# def search_listings(
-#     description: str,
-#     size: str | None = None,
-#     max_price: float | None = None,
-# ) -> list[dict]:
-#     """
-#     <-- YOUR DESCRIPTION GOES HERE.
-#
-#         One or two sentences. What does this tool do, what does it need, and
-#         what does it give back when it finds nothing? Written for a reader
-#         who cannot see the code.
-#     """
-#     return _search_listings_impl(description, size, max_price)
-#
-# ──────────────────────────────────────────────────────────────────────────────
-#
-# Two notes on the block above.
-#
-# The registered name is the *function* name — so the block above registers
-# "search_listings", which is exactly what call_tool("search_listings", ...)
-# asks for. That is also why the import at the top of this file brings the real
-# implementation in under an alias: without it, the registered function and the
-# one it calls would be the same name, and the tool would call itself.
-#
-# FastMCP builds the input schema from your type hints, which is why the hints
-# are not optional here. `description: str` becomes a required string;
-# `max_price: float | None = None` becomes an optional number. Getting these
-# wrong is the most common reason a call is rejected.
+# FastMCP builds the input schema from the type hints.
+# description is required; size and max_price are optional.
 
 
 if __name__ == "__main__":
