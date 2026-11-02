@@ -230,6 +230,12 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
         "once each. Include at least one accurate color or style detail "
         "from the listing. Describe the outfit's vibe using the supplied "
         "suggestion. Make it sound like a real person sharing a find.\n"
+        "Write from the perspective of a shopper considering this item "
+        "from someone else's listing. Describe how the shopper could "
+        "style it. Do not claim the shopper already bought or owns it, "
+        "listed it for sale, or owns the seller's account. "
+        "Avoid sales invitations such as 'grab it before it is gone' "
+        "or 'before I change my mind and keep it.'\n"
         "Do not invent facts, a physical location, or a missing brand. "
         "Return only the caption without headings or bullet points."
     )
