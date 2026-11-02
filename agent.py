@@ -171,69 +171,145 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    trace.start_trace()
     count = 0
+    current_tool = None
 
-    while session["fit_card"] is None:
-        count += 1
-        trace.check_iterations(count)
+    try:
+        while session["fit_card"] is None:
+            count += 1
+            trace.check_iterations(count)
 
-        if not session["parsed"]:
-            session["parsed"] = parse_query(session["query"])
+            if not session["parsed"]:
+                session["parsed"] = parse_query(session["query"])
 
-            if not session["parsed"]["description"]:
-                session["error"] = (
-                    "Please describe the clothing you want, such as "
-                    "'graphic tee', along with an optional size and budget."
+                trace.step(
+                    "parse_query",
+                    inputs=session["query"],
+                    returned=str(session["parsed"]),
                 )
-                return session
 
-        elif session["selected_item"] is None:
-            session["search_results"] = call_tool(
-                "search_listings",
-                {
-                    "description": session["parsed"]["description"],
-                    "size": session["parsed"]["size"],
-                    "max_price": session["parsed"]["max_price"],
-                },
-            )
+                if not session["parsed"]["description"]:
+                    session["error"] = (
+                        "Please describe the clothing you want, such as "
+                        "'graphic tee', along with an optional size and budget."
+                    )
+                    trace.step("stop", note=session["error"])
+                    return session
 
-            if not session["search_results"]:
-                session["error"] = (
-                    "No listings matched your search. Try different "
-                    "clothing keywords, another size, or a higher "
-                    "maximum price."
+            elif session["selected_item"] is None:
+                current_tool = "search_listings (via MCP)"
+
+                session["search_results"] = call_tool(
+                    "search_listings",
+                    {
+                        "description": session["parsed"]["description"],
+                        "size": session["parsed"]["size"],
+                        "max_price": session["parsed"]["max_price"],
+                    },
                 )
-                return session
 
-            session["selected_item"] = session["search_results"][0]
-
-        elif session["outfit_suggestion"] is None:
-            session["outfit_suggestion"] = suggest_outfit(
-                new_item=session["selected_item"],
-                wardrobe=session["wardrobe"],
-            )
-
-            if not session["outfit_suggestion"].strip():
-                session["error"] = (
-                    "The outfit tool returned no suggestions. "
-                    "Please try your request again."
+                trace.step(
+                    current_tool,
+                    inputs=str(session["parsed"]),
+                    returned=session["search_results"],
                 )
-                return session
 
-        else:
-            session["fit_card"] = create_fit_card(
-                outfit=session["outfit_suggestion"],
-                new_item=session["selected_item"],
-            )
+                if not session["search_results"]:
+                    session["error"] = (
+                        "No listings matched your search. Try different "
+                        "clothing keywords, another size, or a higher "
+                        "maximum price."
+                    )
+                    trace.step(
+                        "empty-search branch",
+                        note=(
+                            session["error"]
+                            + " Stopping before outfit and caption tools."
+                        ),
+                    )
+                    return session
 
-            if not session["fit_card"].strip():
-                session["fit_card"] = None
-                session["error"] = (
-                    "The caption tool returned no caption. "
-                    "Please try your request again."
+                session["selected_item"] = session["search_results"][0]
+
+                trace.step(
+                    "select_item",
+                    returned=session["selected_item"],
+                    note=f"Saved ID: {session['selected_item']['id']}",
                 )
-                return session
 
+            elif session["outfit_suggestion"] is None:
+                current_tool = "suggest_outfit"
+
+                trace.step(
+                    "suggest_outfit input",
+                    inputs=session["selected_item"],
+                    note=(
+                        f"Item ID: {session['selected_item']['id']}; "
+                        f"wardrobe items: {len(session['wardrobe']['items'])}"
+                    ),
+                )
+
+                session["outfit_suggestion"] = suggest_outfit(
+                    new_item=session["selected_item"],
+                    wardrobe=session["wardrobe"],
+                )
+
+                trace.step(
+                    "suggest_outfit result",
+                    returned=session["outfit_suggestion"],
+                )
+
+                if not session["outfit_suggestion"].strip():
+                    session["error"] = (
+                        "The outfit tool returned no suggestions. "
+                        "Please try your request again."
+                    )
+                    trace.step("stop", note=session["error"])
+                    return session
+
+            else:
+                current_tool = "create_fit_card"
+
+                trace.step(
+                    "create_fit_card input",
+                    inputs=session["selected_item"],
+                    note=f"Item ID: {session['selected_item']['id']}",
+                )
+                trace.step(
+                    "create_fit_card outfit input",
+                    inputs=session["outfit_suggestion"],
+                )
+
+                session["fit_card"] = create_fit_card(
+                    outfit=session["outfit_suggestion"],
+                    new_item=session["selected_item"],
+                )
+
+                trace.step(
+                    "create_fit_card result",
+                    returned=session["fit_card"],
+                )
+
+                if not session["fit_card"].strip():
+                    session["fit_card"] = None
+                    session["error"] = (
+                        "The caption tool returned no caption. "
+                        "Please try your request again."
+                    )
+                    trace.step("stop", note=session["error"])
+                    return session
+
+    except ModelUnavailable:
+        session["error"] = (
+            f"The model could not be reached while running {current_tool}. "
+            "Check your internet connection and GEMINI_API_KEY in .env, "
+            "then try again."
+        )
+        trace.step("model unavailable", note=session["error"])
+        return session
+
+    trace.step("complete", note="Returning the finished session.")
     return session
 
 
