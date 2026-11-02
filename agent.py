@@ -13,6 +13,8 @@ Build and test your three tools in `tools.py` first. Then come here.
     python agent.py          runs both example paths below
 """
 
+import re
+
 import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
@@ -36,14 +38,76 @@ def new_session(query: str, wardrobe: dict) -> dict:
     Add fields if you need them.
     """
     return {
-        "query": query,              # what the user typed
-        "parsed": {},                # description / size / max_price you pulled out of it
-        "search_results": [],        # everything search_listings returned
-        "selected_item": None,       # the one you chose — goes into suggest_outfit
-        "wardrobe": wardrobe,        # the user's wardrobe
-        "outfit_suggestion": None,   # what suggest_outfit returned
-        "fit_card": None,            # what create_fit_card returned
-        "error": None,               # set when the run ended early
+        "query": query,
+        "parsed": {},
+        "search_results": [],
+        "selected_item": None,
+        "wardrobe": wardrobe,
+        "outfit_suggestion": None,
+        "fit_card": None,
+        "error": None,
+    }
+
+
+# ── query parsing ─────────────────────────────────────────────────────────────
+
+def parse_query(query: str) -> dict:
+    """Extract a description, optional size, and optional maximum price."""
+    description = query.strip()
+    max_price = None
+    size = None
+
+    price_match = re.search(
+        r"\b(?:under|below|up to|at most)\s*\$?\s*"
+        r"(\d+(?:\.\d{1,2})?)(?![\d.])",
+        description,
+        flags=re.IGNORECASE,
+    )
+
+    if price_match:
+        max_price = float(price_match.group(1))
+        description = (
+            description[:price_match.start()]
+            + " "
+            + description[price_match.end():]
+        )
+
+    size_match = re.search(
+        r"\b(?:in\s+)?size\s+"
+        r"([a-z0-9]+(?:[./-][a-z0-9]+)*(?:\s+L\d+)?)\b",
+        description,
+        flags=re.IGNORECASE,
+    )
+
+    if size_match:
+        size = size_match.group(1).upper()
+        description = (
+            description[:size_match.start()]
+            + " "
+            + description[size_match.end():]
+        )
+
+    # Remove common request wording rather than treating it as search keywords.
+    description = re.sub(
+        r"^\s*(?:i(?:'m| am)\s+)?"
+        r"(?:looking for|searching for|find me|find|show me)"
+        r"\s+",
+        "",
+        description,
+        flags=re.IGNORECASE,
+    )
+    description = re.sub(
+        r"^\s*(?:a|an|some)\s+",
+        "",
+        description,
+        flags=re.IGNORECASE,
+    )
+    description = re.sub(r"\s+", " ", description).strip(" ,")
+
+    return {
+        "description": description,
+        "size": size,
+        "max_price": max_price,
     }
 
 
@@ -106,9 +170,66 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    count = 0
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
+    while session["fit_card"] is None:
+        count += 1
+        trace.check_iterations(count)
+
+        if not session["parsed"]:
+            session["parsed"] = parse_query(session["query"])
+
+            if not session["parsed"]["description"]:
+                session["error"] = (
+                    "Please describe the clothing you want, such as "
+                    "'graphic tee', along with an optional size and budget."
+                )
+                return session
+
+        elif session["selected_item"] is None:
+            session["search_results"] = search_listings(
+                description=session["parsed"]["description"],
+                size=session["parsed"]["size"],
+                max_price=session["parsed"]["max_price"],
+            )
+
+            if not session["search_results"]:
+                session["error"] = (
+                    "No listings matched your search. Try different "
+                    "clothing keywords, another size, or a higher "
+                    "maximum price."
+                )
+                return session
+
+            session["selected_item"] = session["search_results"][0]
+
+        elif session["outfit_suggestion"] is None:
+            session["outfit_suggestion"] = suggest_outfit(
+                new_item=session["selected_item"],
+                wardrobe=session["wardrobe"],
+            )
+
+            if not session["outfit_suggestion"].strip():
+                session["error"] = (
+                    "The outfit tool returned no suggestions. "
+                    "Please try your request again."
+                )
+                return session
+
+        else:
+            session["fit_card"] = create_fit_card(
+                outfit=session["outfit_suggestion"],
+                new_item=session["selected_item"],
+            )
+
+            if not session["fit_card"].strip():
+                session["fit_card"] = None
+                session["error"] = (
+                    "The caption tool returned no caption. "
+                    "Please try your request again."
+                )
+                return session
+
     return session
 
 
