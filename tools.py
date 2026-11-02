@@ -23,7 +23,7 @@ the description has to say what is *in* the list.
 import config  # noqa: F401 — you'll use this in search_listings
 from generate import generate
 from utils.data_loader import load_listings
-
+import re
 
 # ── Tool 1: search_listings ───────────────────────────────────────────────────
 
@@ -78,8 +78,56 @@ def search_listings(
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
-    # TODO: replace this with your implementation
-    return []
+    listings = load_listings()
+    keywords = set(re.findall(r"\w+", description.lower()))
+
+    if not keywords:
+        return []
+
+    matches = []
+
+    for listing in listings:
+        if max_price is not None and listing["price"] > max_price:
+            continue
+
+        if size is not None:
+            requested_size = re.findall(r"[a-z0-9]+", size.lower())
+            listing_size = re.findall(
+                r"[a-z0-9]+", listing["size"].lower()
+            )
+
+            if not requested_size:
+                continue
+
+            size_matches = any(
+                listing_size[start:start + len(requested_size)]
+                == requested_size
+                for start in range(len(listing_size))
+            )
+
+            if not size_matches:
+                continue
+
+        searchable_text = " ".join([
+            listing["title"],
+            listing["description"],
+            *listing["style_tags"],
+        ])
+
+        listing_words = set(
+            re.findall(r"\w+", searchable_text.lower())
+        )
+        score = len(keywords & listing_words)
+
+        if score > 0:
+            matches.append((score, listing))
+
+    matches.sort(key=lambda match: match[0], reverse=True)
+
+    return [
+        listing
+        for score, listing in matches[:config.SEARCH_RESULT_LIMIT]
+    ]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
@@ -112,8 +160,26 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
     """
-    # TODO: replace this with your implementation
-    return ""
+    if not wardrobe["items"]:
+        prompt = (
+            "Suggest one or two general outfit ideas for this item:\n"
+            f"{new_item}\n\n"
+            "The user has not provided any wardrobe items. "
+            "Do not claim they own any suggested clothing. "
+            "Describe pieces they could pair with the selected item."
+        )
+    else:
+        prompt = (
+            "Suggest one or two outfits using this selected item:\n"
+            f"{new_item}\n\n"
+            "Use specific pieces from this wardrobe:\n"
+            f"{wardrobe['items']}\n\n"
+            "Name the selected item and the wardrobe pieces used. "
+            "Briefly explain how their colors or styles work together. "
+            "Do not invent items in the user's wardrobe."
+        )
+
+    return generate(prompt).strip()
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
@@ -152,5 +218,20 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
     """
-    # TODO: replace this with your implementation
-    return ""
+    if not outfit.strip():
+        return "Cannot create a fit card without an outfit suggestion."
+
+    prompt = (
+        "Write a casual social caption about this thrift find "
+        "in 2–4 sentences.\n\n"
+        f"Selected item: {new_item}\n\n"
+        f"Outfit suggestion: {outfit}\n\n"
+        "Mention the item, its correct price, and its listing platform "
+        "once each. Include at least one accurate color or style detail "
+        "from the listing. Describe the outfit's vibe using the supplied "
+        "suggestion. Make it sound like a real person sharing a find.\n"
+        "Do not invent facts, a physical location, or a missing brand. "
+        "Return only the caption without headings or bullet points."
+    )
+
+    return generate(prompt).strip()
