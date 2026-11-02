@@ -25,9 +25,10 @@ Given a query that matches at least one listing, the agent completes all three
 tool calls and returns a fit card — in at least 4 of 5 tries.
 
 **Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+The provided target is 4 of 5 because the outfit and caption tools call a model,
+so an occasional failed or empty response could prevent the full
+run from finishing. The agent should still complete most matching
+requests successfully.
 
 ---
 
@@ -37,65 +38,52 @@ Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
 **Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+I chose 5 of 5 because checking whether search returned an empty
+list is a fixed rule in the code. When nothing matches, the agent
+should always stop and explain what the user could change.
 
 ---
 
-## 3. Something about state
+## 3. The selected item reaches the outfit tool unchanged
 
-<!-- YOU WRITE THIS ONE.
-
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
+For each run that finds a listing, the ID in session["selected_item"]
+must match the ID of the new_item actually received by suggest_outfit —
+5 of 5 tries.
 
 **Why this target:**
+I expect the correct item to be passed along every time. If search finds
+a shirt but the outfit tool receives a different item, the suggestions
+would be for something I did not select. Passing a saved item between
+tools should not depend on the model's wording.
 
 
 
 ---
+## 4. Fit cards are descriptive and include listing details
 
-## 4. Something about the fit card
-
-<!-- YOU WRITE THIS ONE.
-
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
+For five runs that produce a fit card, each caption must contain
+2–4 sentences, describe the selected item using at least one accurate
+color or style detail, and include its correct price and listing
+platform — 5 of 5 tries.
 
 **Why this target:**
-
+I want every caption to describe the item clearly and tell me its price
+and where to find it. The wording can change, but these details should
+be included every time because they are provided in the listing.
 
 
 ---
+## 5. Search respects the maximum price
 
-## 5. Your choice
-
-<!-- YOU WRITE THIS ONE TOO.
-
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
+For five searches with a maximum price, every listing returned by
+search_listings must have a price less than or equal to that maximum —
+5 of 5 tries.
 
 
 **Why this target:**
-
+I chose 5 of 5 because the budget is a firm limit. Even one result above
+my budget would be irritating because it is not what I asked for.
+The tool filters numeric prices, so it should enforce this limit every time.
 
 
 ---
