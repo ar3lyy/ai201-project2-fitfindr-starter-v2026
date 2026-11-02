@@ -211,7 +211,6 @@ Full evidence: [Before report](results/run_2026-11-01_224720_before.md).
 
 Five scenarios ran five times each, with caching disabled and temperature 0.9. The run made 40 model calls. The impossible-search scenario requires no model calls.
 
-The evaluator records evidence but does not automatically assign PASS or FAIL. I applied the original criteria to the saved output with AI assistance.
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
