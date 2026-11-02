@@ -1,14 +1,25 @@
 # FitFindr
 
-> **Start here:** Read [RUNNING.md](RUNNING.md) for setup, commands, and troubleshooting.
->
-> This README records my progress. The three tools are implemented and tested individually. Connecting them through the planning loop is next.
+Read [RUNNING.md](RUNNING.md) for setup, commands, and troubleshooting.
 
 <!-- UNIT 3 — THE BUILD -->
 
 ## What This Does
 
-FitFindr is being built to help users find thrift listings based on a description, size, and budget. It searches a local dataset of listings and suggests outfits using a saved wardrobe. It then writes a short caption describing the find, including its price and listing platform. If no listings match, the planned behavior is to stop and suggest changing the search.
+FitFindr helps users find thrift listings based on a clothing description, optional size, and budget. It searches a local dataset of 40 listings and suggests outfits using a saved wardrobe. It then writes a short caption describing the find, including its price and listing platform. When no listings match, it stops and suggests changing the clothing keywords, size, or maximum price.
+
+To run it after completing the setup in RUNNING.md:
+
+```bash
+source .venv/bin/activate
+python app.py ask 'vintage graphic tee under $30, size M'
+```
+
+To run the two built-in examples:
+
+```bash
+python agent.py
+```
 
 ---
 
@@ -35,21 +46,30 @@ FitFindr is being built to help users find thrift listings based on a descriptio
 - **Returns:** A caption string. The prompt requests 2–4 sentences mentioning the item, its correct price, and its platform once each, plus an accurate color or style detail.
 - **When it has nothing:** If `outfit` is empty or contains only whitespace, returns `"Cannot create a fit card without an outfit suggestion."` without calling the model.
 
-The model tools return the model's text after stripping surrounding whitespace. Their caption and outfit requirements are prompt instructions, not guarantees enforced by output validation.
+The model tools return the model's text after stripping surrounding whitespace. Their caption and outfit requirements are prompt instructions, not guarantees enforced by output validation. The agent checks for empty responses and stops with a message if one occurs.
 
 ---
 
 ## Planning Loop
 
-**Branch rule:** If `search_listings` returns an empty list, save a message in the session suggesting the user change their description, size, or maximum price, then stop without calling `suggest_outfit` or `create_fit_card`. Otherwise, save the first result as `selected_item`, use it to suggest an outfit, and create a fit card, saving and reading each result through the session.
+**Branch rule:** If `search_listings` returns an empty list, save a message in `session["error"]` suggesting the user change their description, size, or maximum price, then stop without calling `suggest_outfit` or `create_fit_card`. Otherwise, save the first result as `selected_item`, use it to suggest an outfit, and create a fit card, saving and reading each result through the session.
 
 **Where it lives:** `agent.py::run_agent`
 
-**Implementation status:** Planned; not implemented yet.
+**How the query is parsed:** `agent.py::parse_query` uses regular expressions. It extracts a price after wording such as "under," "below," "up to," or "at most," and extracts a size following "size." It removes those parts and common request wording from the description. For example, `vintage graphic tee under $30, size M` becomes description `vintage graphic tee`, size `M`, and maximum price `30.0`. This parser handles these patterns rather than every possible way someone might phrase a request.
 
-**How the query is parsed:** To be documented when the planning loop is implemented.
+**What moves through the session:**
 
-**What moves through the session:** To be documented and verified when the planning loop is implemented.
+1. The original query and wardrobe are saved when the session starts.
+2. The extracted description, size, and maximum price are saved in `parsed`.
+3. Search reads `parsed` and saves its output in `search_results`.
+4. The first search result is saved in `selected_item`.
+5. The outfit tool reads `selected_item` and `wardrobe`, then saves its output in `outfit_suggestion`.
+6. The caption tool reads `outfit_suggestion` and `selected_item`, then saves its output in `fit_card`.
+
+The loop checks the session to decide which step to perform next. Each iteration calls `trace.check_iterations(count)` to enforce the configured iteration limit. It also stops early for an empty description or an empty model response.
+
+**Session verification:** I wrapped `suggest_outfit` with `unittest.mock.patch` using `wraps`, so the real tool still ran while its input was captured. I compared the received item with the selected item saved in the session. Both IDs were `lst_002`, and the full dictionaries matched. This verifies one development run; it is not the five-run evaluation for Unit 4.
 
 ---
 
@@ -59,7 +79,7 @@ The model tools return the model's text after stripping surrounding whitespace. 
 
 All 10 environment checks passed. I inspected six listings and reviewed fields including title, description, style_tags, size, and price. The wardrobe stores clothing in an items list; an empty wardrobe is `{"items": []}`.
 
-Starter command and output:
+Before implementing the loop, the starter produced:
 
 ```text
 $ python app.py ask 'vintage graphic tee under $30'
@@ -69,9 +89,43 @@ $ python app.py ask 'vintage graphic tee under $30'
 0 model calls this session
 ```
 
-### One full query
+### Full agent run
 
-Pending Milestone 5: replace this note with a full agent command and its actual output after connecting the tools.
+Command: `python agent.py`
+
+The first built-in query is `looking for a vintage graphic tee under $30`. The second is `designer ballgown size XXS under $5`. This output comes from `agent.py::run_agent`, displayed by `agent.py::_show`.
+
+```text
+$ python agent.py
+=== A query the data can match ===
+  found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+  outfit:   Here is a stylish Y2K-inspired outfit using the baby tee and pieces from your wardrobe:
+
+### The Outfit: Y2K Streetwear Contrast
+
+*   **Selected Item:** Y2K Baby Tee — Butterfly Print (white, pink, purple)
+*   **Wardrobe Piece 1:** Baggy straight-leg jeans, dark wash (`w_001`)
+*   **Wardrobe Piece 2:** Vintage black denim jacket (`w_006`)
+*   **Wardrobe Piece 3:** Chunky white sneakers (`w_007`)
+*   **Wardrobe Piece 4:** Black crossbody bag (`w_010`)
+
+### Why It Works:
+*   **Proportion Play:** The fitted, cropped cut of the baby tee balances out the high-waisted, relaxed silhouette of the baggy dark-wash jeans, nailing that classic early 2000s streetwear aesthetic.
+*   **Color Harmony:** The white base and pink/purple tones of the butterfly graphic pop against the dark indigo denim, while the white chunky sneakers tie the white elements of the shirt together.
+*   **Texture & Layering:** Throwing on the slightly cropped vintage black denim jacket adds an extra layer of Y2K grunge texture without hiding the waistline of the jeans, completed simply with the black crossbody bag.
+  fit card: Found this super cute Y2K butterfly print baby tee for just $18, and I am obsessed with the pink and purple details! I styled it with baggy denim and a vintage jacket for the ultimate early 2000s streetwear vibe. Now live on Depop, so grab it before I change my mind!
+
+=== A query it can't ===
+  stopped: No listings matched your search. Try different clothing keywords, another size, or a higher maximum price.
+  fit_card is None — it should still be None here
+
+The second one should stop before the fit card. If both paths look the same,
+the branch isn't doing anything yet.
+```
+
+The successful path returned an outfit and caption. The impossible query stopped with a useful message and left `fit_card` as None.
+
+One caption limitation is that "Now live on Depop" makes the user sound like the seller, although the user is looking for something to buy. This wording needs further evaluation.
 
 ### The three tools, tested one at a time
 
@@ -155,6 +209,55 @@ $ python -c "from tools import create_fit_card; from utils.data_loader import lo
 Cannot create a fit card without an outfit suggestion.
 ```
 
+### Session and item handoff check
+
+I ran this check to print the session and compare the saved item with the actual input to the outfit tool:
+
+```bash
+python - <<'PY'
+from unittest.mock import patch
+from pprint import pprint
+import agent
+from utils.data_loader import get_example_wardrobe
+
+with patch.object(
+    agent, "suggest_outfit", wraps=agent.suggest_outfit
+) as outfit_tool:
+    session = agent.run_agent(
+        "vintage graphic tee under $30, size M",
+        get_example_wardrobe(),
+    )
+
+    pprint(session)
+
+    if outfit_tool.called:
+        received = outfit_tool.call_args.kwargs["new_item"]
+        print("\nSaved item ID:", session["selected_item"]["id"])
+        print("Received item ID:", received["id"])
+        print("Full item matches:", session["selected_item"] == received)
+    else:
+        print("\nOutfit tool was not called.")
+PY
+```
+
+The printed session included these parsed values:
+
+```text
+'parsed': {'description': 'vintage graphic tee',
+           'max_price': 30.0,
+           'size': 'M'}
+```
+
+The comparison printed:
+
+```text
+Saved item ID: lst_002
+Received item ID: lst_002
+Full item matches: True
+```
+
+The session's error was None, and it contained the outfit suggestion and fit card.
+
 ---
 
 ## How I Used AI
@@ -165,11 +268,11 @@ Cannot create a fit card without an outfit suggestion.
 - **What came back:** It identified that the search implementation was inside `suggest_outfit`, while `search_listings` still contained its original `return []`.
 - **What I changed:** I put the search implementation inside `search_listings` and restored the outfit placeholder. Running the search again returned listings.
 
-### Moment 2: Keeping the starter instructions
+### Moment 2: Building the tools and planning loop
 
-- **What I asked for:** I asked ChatGPT for a complete file while keeping the original starter comments and instructions.
-- **What came back:** It provided a complete `tools.py` with the original instructions and the implementations added as we worked through the tools.
-- **What I changed:** I replaced my local file with that version and ran the tools separately, including the empty-search, empty-wardrobe, and empty-outfit checks.
+- **What I asked for:** I asked ChatGPT for complete files while keeping the original starter comments and instructions.
+- **What came back:** It provided the tool implementations and a planning loop that parses the query with regular expressions, stores results in the session, and stops when search returns an empty list.
+- **What I changed:** I replaced my local files with those versions and tested the tools individually. I then ran both agent paths and a separate session check that confirmed the saved item matched the item received by the outfit tool.
 
 <!-- UNIT 4 — THE TEST
 Do not fill these sections in during unit 3.
